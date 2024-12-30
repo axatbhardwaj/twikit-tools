@@ -1,4 +1,3 @@
-
 import twikit
 from typing import Optional
 import json
@@ -7,9 +6,15 @@ from pathlib import Path
 import time
 
 SCRIPT_DIR = Path(__file__).parent
+COOKIES_DIR = SCRIPT_DIR / "cookies"
 EXTRACTED_COOKIES_PATH = SCRIPT_DIR / "x.com.cookies.json"
-SAVED_COOKIES_PATH = SCRIPT_DIR / "twikit_cookies.json"
 
+# Create cookies directory if it doesn't exist
+COOKIES_DIR.mkdir(exist_ok=True)
+
+def get_cookie_path(username: str) -> Path:
+    """Get the cookie file path for a specific username"""
+    return COOKIES_DIR / f"{username}_cookies.json"
 
 def await_for_cookies() -> dict:
     """Awaits for the cookies file"""
@@ -39,8 +44,9 @@ async def async_get_twitter_cookies(username, email, password) -> Optional[str]:
         valid_cookies = False
 
         # If cookies exist, try with those and validate
-        if SAVED_COOKIES_PATH.exists():
-            with open(SAVED_COOKIES_PATH, "r", encoding="utf-8") as cookies_file:
+        cookie_path = get_cookie_path(username)
+        if cookie_path.exists():
+            with open(cookie_path, "r", encoding="utf-8") as cookies_file:
                 cookies = json.load(cookies_file)
                 client.set_cookies(cookies)
 
@@ -54,13 +60,13 @@ async def async_get_twitter_cookies(username, email, password) -> Optional[str]:
                 auth_info_2=email,
                 password=password,
             )
-            client.save_cookies(SAVED_COOKIES_PATH)
+            client.save_cookies(cookie_path)
 
     except twikit.errors.BadRequest:
         print("Twitter login failed due to a known issue with the login flow.\nPlease check the known issues section in the README to find the solution. You will need to provide us with a cookies file.")
         cookies = await_for_cookies()
         client.set_cookies(cookies)
-        client.save_cookies(SAVED_COOKIES_PATH)  # Save cookies to the specified path
+        client.save_cookies(cookie_path)  # Save cookies to the specified path
 
     return json.dumps(client.get_cookies()).replace(" ", "")
 
@@ -83,9 +89,10 @@ async def verify_and_save_cookies(username: str, email: str, password: str) -> b
         user = await client.user()
         if user.screen_name == username:
             cookies = client.get_cookies()
-            with open(SAVED_COOKIES_PATH, "w", encoding="utf-8") as f:
+            cookie_path = get_cookie_path(username)
+            with open(cookie_path, "w", encoding="utf-8") as f:
                 json.dump(cookies, f, indent=4)
-            print(f"Cookies successfully saved to {SAVED_COOKIES_PATH}")
+            print(f"Cookies successfully saved to {cookie_path}")
             return True
     except Exception as e:
         print(f"Login failed: {e}")
@@ -104,21 +111,21 @@ if __name__ == "__main__":
     main()
 
 
-async def async_validate_twitter_credentials():
+async def async_validate_twitter_credentials(username: str, email: str, password: str):
     """Test twitter credential validity"""
+    cookie_path = get_cookie_path(username)
 
-    # Load cookies
-    with open(Path(".memeooorr", "local_config.json"), "r", encoding="utf-8") as config_file:
-        config = json.load(config_file)
-        cookies = json.loads(config["twikit_cookies"])
+    # Load cookies if they exist
+    cookies = None
+    if cookie_path.exists():
+        with open(cookie_path, "r", encoding="utf-8") as cookie_file:
+            cookies = json.load(cookie_file)
 
     # Instantiate the client
-    client = twikit.Client(
-        language="en-US"
-    )
+    client = twikit.Client(language="en-US")
 
-    # Set cookies
-    client.set_cookies(cookies)
+    if cookies:
+        client.set_cookies(cookies)
 
     # Try to read using cookies
     try:
@@ -127,18 +134,14 @@ async def async_validate_twitter_credentials():
         return is_valid_cookies, None
     except twikit.errors.Forbidden:
         is_valid_cookies = False
-        cookies = await async_get_twitter_cookies(
-            config["twikit_username"],
-            config["twikit_email"],
-            config["twikit_password"]
-        )
-        with open(SCRIPT_DIR / ".memeooorr" / "local_config.json", "w", encoding="utf-8") as config_file:
-            config["twikit_cookies"] = cookies
-            json.dump(config, config_file, indent=4)
+        cookies = await async_get_twitter_cookies(username, email, password)
+        
+        # Save new cookies to username-specific path
+        with open(cookie_path, "w", encoding="utf-8") as cookie_file:
+            json.dump(cookies, cookie_file, indent=4)
         return is_valid_cookies, cookies
-    
 
 
-def validate_twitter_credentials() -> Optional[str]:
+def validate_twitter_credentials(username: str, email: str, password: str) -> Optional[str]:
     """Validate twitter credentials"""
-    return asyncio.run(async_validate_twitter_credentials())
+    return asyncio.run(async_validate_twitter_credentials(username, email, password))
