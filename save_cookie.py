@@ -6,6 +6,7 @@ import asyncio
 from pathlib import Path
 import time
 from stringify_json import stringify_json
+from dotenv import load_dotenv
 
 SCRIPT_DIR = Path(__file__).parent
 COOKIES_DIR = SCRIPT_DIR / "cookies"
@@ -46,6 +47,7 @@ async def verify_and_save_cookies(username: str, email: str, password: str) -> b
 def main():
 
     # load environment variables from .env file
+    load_dotenv()
 
     auth_info_1 = os.getenv("TWIKIT_USERNAME")
     auth_info_2 = os.getenv("TWIKIT_EMAIL")
